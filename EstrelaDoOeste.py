@@ -1,18 +1,14 @@
 from PyQt5 import QtWidgets, QtGui, QtCore
+from PyQt5.QtGui import QIcon, QColor, QPalette, QLinearGradient, QBrush, QGradient
 import sys
 import sqlite3
 from fpdf import FPDF
-from PyQt5.QtGui import QIcon
-from unidecode import unidecode
-from math import ceil  # Importa a função ceil
+from math import ceil
 
- 
-
-# Conexão com o banco de dados
+# --- Configuração do Banco de Dados ---
 conn = sqlite3.connect('saloon_recipes.db')
 cursor = conn.cursor()
 
-# Criação das tabelas
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS recipes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,151 +31,257 @@ CREATE TABLE IF NOT EXISTS ingredients (
 
 conn.commit()
 
+# --- Classe Principal ---
 class RecipeApp(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Estrela do Oeste')
-        self.setGeometry(100, 100, 800, 600)
+        self.setWindowTitle('Estrela do Oeste - Premium Edition')
+        self.resize(1100, 750)
 
-        # Central widget
+        # Widget Central e Layout
         central_widget = QtWidgets.QWidget(self)
+        central_widget.setObjectName("CentralWidget")
         self.setCentralWidget(central_widget)
+        
+        self.main_layout = QtWidgets.QHBoxLayout(central_widget)
+        self.main_layout.setContentsMargins(20, 20, 20, 20)
+        self.main_layout.setSpacing(20)
 
         self.initUI()
-        self.apply_styles()
+        # Aplicamos o estilo na aplicação inteira para garantir que os popups peguem
+        self.apply_glass_orange_style()
 
     def initUI(self):
-        # Cria um layout horizontal para o widget central
-        layout = QtWidgets.QHBoxLayout(self.centralWidget())
+        # --- 1. SIDEBAR ---
+        self.sidebar_frame = QtWidgets.QFrame()
+        self.sidebar_frame.setObjectName("GlassPanel") 
+        self.sidebar_layout = QtWidgets.QVBoxLayout(self.sidebar_frame)
+        self.sidebar_layout.setContentsMargins(20, 30, 20, 30)
+        self.sidebar_layout.setSpacing(15)
+        self.sidebar_frame.setFixedWidth(300)
 
-        # Painel esquerdo para imagem do saloon e barra de busca
-        left_panel = QtWidgets.QVBoxLayout()
+        # Título
+        logo = QtWidgets.QLabel("ESTRELA\nDO OESTE")
+        logo.setAlignment(QtCore.Qt.AlignCenter)
+        logo.setObjectName("LogoText")
+        self.sidebar_layout.addWidget(logo)
 
-        # Definindo a largura máxima do painel
-        left_panel.setContentsMargins(0, 0, 0, 0)  # Remove margens padrão
-        left_panel.setSpacing(10)  # Adiciona algum espaçamento entre os widgets
+        # Divisor
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.HLine)
+        line.setObjectName("OrangeLine")
+        self.sidebar_layout.addWidget(line)
 
-        # Define o widget do painel e a largura máxima
-        left_panel_widget = QtWidgets.QWidget(self)
-        left_panel_widget.setLayout(left_panel)
-        left_panel_widget.setMaximumWidth(300)  # Define a largura máxima
+        # Navegação
+        lbl_busca = QtWidgets.QLabel("NAVEGAÇÃO")
+        lbl_busca.setObjectName("SectionTitle")
+        self.sidebar_layout.addWidget(lbl_busca)
 
-        # Adiciona o widget do painel ao layout principal
-        layout.addWidget(left_panel_widget)
-
-        # Imagem do saloon
-        self.image_label = QtWidgets.QLabel(self)
-        self.image_label.setAlignment(QtCore.Qt.AlignCenter)
-        pixmap = QtGui.QPixmap("imagens/saloon.jpg")  # Carrega a imagem do saloon
-        self.image_label.setPixmap(pixmap.scaled(300, 180, QtCore.Qt.KeepAspectRatio))  # Redimensiona a imagem mantendo a proporção
-        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)  # Permite que a imagem expanda
-        self.image_label.setScaledContents(True)  # Ajusta o conteúdo escalado da imagem
-        left_panel.addWidget(self.image_label)  # Adiciona a imagem ao painel esquerdo
-
-        # Barra de busca
         self.search_bar = QtWidgets.QLineEdit(self)
-        self.search_bar.setPlaceholderText('Buscar Receita...')  # Texto de placeholder
-        left_panel.addWidget(self.search_bar)  # Adiciona a barra de busca ao painel esquerdo
+        self.search_bar.setPlaceholderText('Buscar Receita...')
+        self.sidebar_layout.addWidget(self.search_bar)
 
-        # Botão de busca
-        self.search_button = QtWidgets.QPushButton(self)
-        self.search_button.setIcon(QIcon('imagens\\buscar.png'))  # Ajusta o caminho do ícone
-        self.search_button.setIconSize(QtCore.QSize(24, 24))  # Define o tamanho do ícone
-        self.search_button.clicked.connect(self.search_recipe)  # Conecta o clique ao método de busca
-        left_panel.addWidget(self.search_button)  # Adiciona o botão de busca ao painel esquerdo
+        self.search_button = QtWidgets.QPushButton('PESQUISAR', self)
+        self.search_button.setCursor(QtCore.Qt.PointingHandCursor)
+        self.search_button.clicked.connect(self.search_recipe)
+        self.sidebar_layout.addWidget(self.search_button)
 
-        # Filtro de categoria
+        # Filtro
+        lbl_cat = QtWidgets.QLabel("CATEGORIAS")
+        lbl_cat.setObjectName("SectionTitle")
+        self.sidebar_layout.addWidget(lbl_cat)
+
         self.category_filter = QtWidgets.QComboBox(self)
-        self.category_filter.addItem("Todas")  # Adiciona a opção "Todas"
-        self.category_filter.addItems(["Entrada", "Prato Principal", "Doces", "Bebidas Alcolicas", "Sucos", "Salgados", "Sopas", "Produtos da Fazenda"])  # Adiciona outras categorias
-        self.category_filter.currentTextChanged.connect(self.load_recipes)  # Conecta a mudança de texto à função de carregar receitas
-        left_panel.addWidget(self.category_filter)  # Adiciona o filtro de categoria ao painel esquerdo
+        self.category_filter.addItem("Todas")
+        self.category_filter.addItems(["Entrada", "Prato Principal", "Doces", "Bebidas Alcolicas", "Sucos", "Salgados", "Sopas", "Produtos da Fazenda"])
+        self.category_filter.currentTextChanged.connect(self.load_recipes)
+        self.sidebar_layout.addWidget(self.category_filter)
 
-        # Adiciona o layout do painel esquerdo ao layout principal
-        layout.addLayout(left_panel)
+        self.sidebar_layout.addStretch() 
+        
+        footer = QtWidgets.QLabel("v2.1 Premium")
+        footer.setAlignment(QtCore.Qt.AlignCenter)
+        footer.setStyleSheet("color: rgba(255,255,255,0.3); font-size: 10px;")
+        self.sidebar_layout.addWidget(footer)
 
-        # Painel direito para lista de receitas e botões
-        right_panel = QtWidgets.QVBoxLayout()
+        self.main_layout.addWidget(self.sidebar_frame)
 
-        # Lista de receitas
-        self.recipe_list = QtWidgets.QListWidget(self)
-        self.recipe_list.setStyleSheet('font-size: 14pt;')  # Define o tamanho da fonte da lista
-        self.recipe_list.itemClicked.connect(self.show_recipe_options)  # Conecta o clique na lista à função de mostrar opções da receita
-        right_panel.addWidget(self.recipe_list)  # Adiciona a lista de receitas ao painel direito
+        # --- 2. CONTEÚDO ---
+        self.content_frame = QtWidgets.QFrame()
+        self.content_frame.setObjectName("GlassPanel")
+        self.content_layout = QtWidgets.QVBoxLayout(self.content_frame)
+        self.content_layout.setContentsMargins(30, 30, 30, 30)
+        self.content_layout.setSpacing(20)
 
-        # Layout para os botões
-        buttons_layout = QtWidgets.QHBoxLayout()
-
-        # Botão de adicionar receita
-        self.add_button = QtWidgets.QPushButton(self)
-        self.add_button.setIcon(QIcon('imagens\\adicionar.png'))  # Ajusta o caminho do ícone
-        self.add_button.setIconSize(QtCore.QSize(24, 24))  # Define o tamanho do ícone
-        self.add_button.clicked.connect(self.add_recipe_and_ingredients)  # Conecta o clique ao método de adicionar receita e ingredientes
-        buttons_layout.addWidget(self.add_button)  # Adiciona o botão de adicionar receita ao layout de botões
-
-        # Botão de relatório
-        self.report_button = QtWidgets.QPushButton(self)
-        self.report_button.setIcon(QIcon('imagens\\relatorio.png'))  # Ajusta o caminho do ícone
-        self.report_button.setIconSize(QtCore.QSize(24, 24))  # Define o tamanho do ícone
-        self.report_button.clicked.connect(self.generate_pdf_report)  # Conecta o clique ao método de gerar relatório PDF
-        buttons_layout.addWidget(self.report_button)  # Adiciona o botão de relatório ao layout de botões
-
-        # Adiciona o layout de botões ao painel direito
-        right_panel.addLayout(buttons_layout)
-
-        # Adiciona o painel direito ao layout principal
-        layout.addLayout(right_panel)
-
-        # Carrega as receitas iniciais
-        self.load_recipes()
-
-        # Botão de orçamento
-        self.budget_button = QtWidgets.QPushButton(self)
-        self.budget_button.setIcon(QIcon('imagens\\orcamento.png'))  # Ajuste o caminho do ícone
-        self.budget_button.setIconSize(QtCore.QSize(24, 24))  # Define o tamanho do ícone
+        # Header
+        header_layout = QtWidgets.QHBoxLayout()
+        title = QtWidgets.QLabel("Gerenciamento de Menu")
+        title.setObjectName("PageTitle")
+        
+        btn_layout = QtWidgets.QHBoxLayout()
+        self.report_button = QtWidgets.QPushButton('Relatório PDF', self)
+        self.report_button.setObjectName("GhostButton")
+        self.report_button.setCursor(QtCore.Qt.PointingHandCursor)
+        self.report_button.clicked.connect(self.generate_pdf_report)
+        
+        self.budget_button = QtWidgets.QPushButton('Orçamento', self)
+        self.budget_button.setObjectName("GhostButton")
+        self.budget_button.setCursor(QtCore.Qt.PointingHandCursor)
         self.budget_button.clicked.connect(self.open_budget_dialog)
 
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        header_layout.addWidget(self.report_button)
+        header_layout.addWidget(self.budget_button)
+        self.content_layout.addLayout(header_layout)
 
-        buttons_layout.addWidget(self.budget_button)  # Adiciona o botão de orçamento ao layout de botões
+        # Lista
+        self.recipe_list = QtWidgets.QListWidget(self)
+        self.recipe_list.itemClicked.connect(self.show_recipe_options)
+        self.content_layout.addWidget(self.recipe_list)
 
-    def open_budget_dialog(self):
-        budget_dialog = BudgetDialog(self)
-        budget_dialog.exec_()
+        # Botão Principal
+        self.add_button = QtWidgets.QPushButton('ADICIONAR NOVA RECEITA', self)
+        self.add_button.setObjectName("GradientButton")
+        self.add_button.setMinimumHeight(60)
+        self.add_button.setCursor(QtCore.Qt.PointingHandCursor)
+        self.add_button.clicked.connect(self.add_recipe_and_ingredients)
+        self.content_layout.addWidget(self.add_button)
 
-    def apply_styles(self):
+        self.main_layout.addWidget(self.content_frame)
+
+        self.load_recipes()
+
+    def apply_glass_orange_style(self):
         style = """
-            QMainWindow {
-                background-color: #3D5A73;
+            /* --- FUNDO GERAL (Apliquei a QDialog também) --- */
+            QMainWindow, QDialog {
+                background-color: #1a1a1a;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #232526, stop:1 #414345);
             }
-            QLabel {
-                color: #182625;
-                font-size: 14pt;
-            }
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                background-color: #2F3D40;
-                color: #ffffff;
-                border: 1px solid #2F3D40;
-                padding: 5px;
-                border-radius: 5px;
-            }
-            QPushButton {
-                background-color: #28403D;
-                color: #ffffff;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #7c7c7c;
-            }
-            QListWidget {
-                background-color: #2F3D40;
-                color: #ffffff;
-                border: 1px solid #5c5c5c;
-            }
-        """
-        self.setStyleSheet(style)
 
+            /* --- TIPOGRAFIA --- */
+            QLabel { 
+                color: #e0e0e0; 
+                font-family: 'Segoe UI', sans-serif;
+                background-color: transparent; /* Importante para Dialogs */
+            }
+            
+            /* --- PAINÉIS DE VIDRO --- */
+            QFrame#GlassPanel {
+                background-color: rgba(30, 30, 30, 180);
+                border: 1px solid rgba(255, 165, 0, 0.3);
+                border-radius: 20px;
+            }
+
+            /* --- TEXTOS ESPECÍFICOS --- */
+            QLabel#LogoText {
+                font-size: 26pt; font-weight: 900; color: #ff9966; letter-spacing: 2px; margin-bottom: 10px;
+            }
+            QLabel#SectionTitle {
+                color: #ffa500; font-weight: bold; font-size: 10pt; margin-top: 10px; letter-spacing: 1px;
+            }
+            QFrame#OrangeLine {
+                color: #ff4500; background-color: #ff4500; height: 2px; border: none;
+            }
+            QLabel#PageTitle {
+                font-size: 22pt; color: white; font-weight: 300;
+            }
+
+            /* --- INPUTS (Campos de texto e números) --- */
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                background-color: rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                padding: 8px;
+                color: white;
+                font-size: 11pt;
+            }
+            QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
+                border: 1px solid #ff9966;
+                background-color: rgba(0, 0, 0, 0.6);
+            }
+            /* Cor do texto dentro do combobox dropdown */
+            QComboBox QAbstractItemView {
+                background-color: #2b2b2b;
+                color: white;
+                selection-background-color: #ff9966;
+                border: 1px solid #444;
+            }
+
+            /* --- BOTÕES --- */
+            QPushButton {
+                background-color: #333;
+                color: white;
+                border-radius: 10px;
+                padding: 10px;
+                font-weight: bold;
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            QPushButton#GradientButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FF512F, stop:1 #F09819);
+                color: white;
+                border: none;
+                font-size: 12pt;
+                letter-spacing: 1px;
+            }
+            QPushButton#GradientButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #dd2476, stop:1 #ff512f);
+            }
+            
+            QPushButton#GhostButton {
+                background-color: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: rgba(255, 255, 255, 0.8);
+            }
+            QPushButton#GhostButton:hover {
+                background-color: rgba(255, 165, 0, 0.1);
+                border: 1px solid #ffa500;
+                color: #ffa500;
+            }
+
+            /* --- LIST WIDGET --- */
+            QListWidget {
+                background-color: transparent;
+                border: none;
+                outline: none;
+            }
+            QListWidget::item {
+                background-color: rgba(255, 255, 255, 0.05);
+                color: #ddd;
+                border-radius: 12px;
+                margin-bottom: 8px;
+                padding: 15px;
+            }
+            QListWidget::item:hover {
+                background-color: rgba(255, 165, 0, 0.1);
+            }
+            QListWidget::item:selected {
+                background-color: rgba(255, 165, 0, 0.2);
+                border-left: 5px solid #ff4500;
+                color: white;
+            }
+
+            /* --- SCROLLBAR --- */
+            QScrollBar:vertical {
+                border: none; background: rgba(0,0,0,0.1); width: 8px; margin: 0px; border-radius: 4px;
+            }
+            QScrollBar::handle:vertical {
+                background: rgba(255, 165, 0, 0.4); min-height: 20px; border-radius: 4px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+            
+            /* --- MENUS --- */
+            QMenu { background-color: #2b2b2b; color: white; border: 1px solid #ff9966; }
+            QMenu::item { padding: 8px 25px; }
+            QMenu::item:selected { background-color: #ff9966; color: black; }
+        """
+        # APLICA O ESTILO NA APLICAÇÃO GLOBALMENTE
+        # Isso garante que Dialogs filhos herdem o estilo
+        QtWidgets.QApplication.instance().setStyleSheet(style)
+
+    # --- Lógica Mantida ---
     def load_recipes(self):
         self.recipe_list.clear()
         category = self.category_filter.currentText()
@@ -188,7 +290,8 @@ class RecipeApp(QtWidgets.QMainWindow):
         else:
             cursor.execute("SELECT id, name, dollar_value, stock, category FROM recipes WHERE category = ?", (category,))
         for row in cursor.fetchall():
-            item = QtWidgets.QListWidgetItem(f"{row[1].upper()} - ${row[2]:.2f} (Estoque: {row[3]}) - Categoria: {row[4]}")
+            texto = f"{row[1].upper()}  —  {row[4]}\n${row[2]:.2f}  •  Estoque: {row[3]}"
+            item = QtWidgets.QListWidgetItem(texto)
             item.setData(QtCore.Qt.UserRole, row[0])
             self.recipe_list.addItem(item)
 
@@ -197,43 +300,48 @@ class RecipeApp(QtWidgets.QMainWindow):
         self.recipe_list.clear()
         cursor.execute("SELECT id, name, dollar_value, stock, category FROM recipes WHERE name LIKE ?", ('%' + search_term + '%',))
         for row in cursor.fetchall():
-            item = QtWidgets.QListWidgetItem(f"{row[1].upper()} - ${row[2]:.2f} (Estoque: {row[3]}) - Categoria: {row[4]}")
+            texto = f"{row[1].upper()}  —  {row[4]}\n${row[2]:.2f}  •  Estoque: {row[3]}"
+            item = QtWidgets.QListWidgetItem(texto)
             item.setData(QtCore.Qt.UserRole, row[0])
             self.recipe_list.addItem(item)
 
     def add_recipe_and_ingredients(self):
-        name, ok = QtWidgets.QInputDialog.getText(self, 'Receita', 'Digite nome do prato/comida:')
+        name, ok = QtWidgets.QInputDialog.getText(self, 'Novo Item', 'Nome do prato/bebida:')
         if ok and name:
-            dollar_value, ok = QtWidgets.QInputDialog.getDouble(self, 'Valor', 'Preço do prato:', decimals=2)
+            dollar_value, ok = QtWidgets.QInputDialog.getDouble(self, 'Preço', 'Valor ($):', decimals=2)
             if ok:
-                stock, ok = QtWidgets.QInputDialog.getInt(self, 'Estoque', 'Quantidade em Estoque:')
+                stock, ok = QtWidgets.QInputDialog.getInt(self, 'Estoque', 'Quantidade Atual:')
                 if ok:
                     categories = ["Entrada", "Prato Principal", "Doces", "Bebidas Alcolicas", "Sucos", "Salgados", "Sopas", "Produtos da Fazenda"]
-                    category, ok = QtWidgets.QInputDialog.getItem(self, "Categoria", "Escolha a categoria da receita:", categories, 0, False)
+                    category, ok = QtWidgets.QInputDialog.getItem(self, "Categoria", "Selecione:", categories, 0, False)
                     if ok and category:
                         cursor.execute("INSERT INTO recipes (name, dollar_value, stock, category) VALUES (?, ?, ?, ?)", (name, dollar_value, stock, category))
                         conn.commit()
-                        recipe_id = cursor.lastrowid
                         self.load_recipes()
-                        self.edit_recipe(recipe_id)
+                        self.edit_recipe(cursor.lastrowid)
 
     def edit_recipe(self, recipe_id):
-        edit_dialog = EditRecipeDialog(self, recipe_id)
-        if edit_dialog.exec_():
+        dialog = EditRecipeDialog(self, recipe_id)
+        # O estilo agora é global, não precisa setar manualmente aqui, mas mal não faz
+        if dialog.exec_():
             self.load_recipes()
 
     def show_recipe_options(self, item):
         recipe_id = item.data(QtCore.Qt.UserRole)
         menu = QtWidgets.QMenu(self)
+        
         edit_action = menu.addAction('Editar')
-        delete_action = menu.addAction('Deletar')
-        calculate_action = menu.addAction('Calcular Ingredientes')
+        calc_action = menu.addAction('Calcular Ingredientes')
+        menu.addSeparator()
+        del_action = menu.addAction('Excluir')
+        
         action = menu.exec_(QtGui.QCursor.pos())
         if action == edit_action:
             self.edit_recipe(recipe_id)
-        elif action == delete_action:
-            self.delete_recipe(recipe_id)
-        elif action == calculate_action:
+        elif action == del_action:
+            if QtWidgets.QMessageBox.Yes == QtWidgets.QMessageBox.question(self, "Confirmação", "Deseja realmente excluir?", QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No):
+                self.delete_recipe(recipe_id)
+        elif action == calc_action:
             self.calculate_ingredients(recipe_id)
 
     def delete_recipe(self, recipe_id):
@@ -244,291 +352,283 @@ class RecipeApp(QtWidgets.QMainWindow):
 
     def calculate_ingredients(self, recipe_id):
         cursor.execute("SELECT name, quantity FROM ingredients WHERE recipe_id = ?", (recipe_id,))
-        ingredients = cursor.fetchall()
-        if ingredients:
-            quantity, ok = QtWidgets.QInputDialog.getInt(self, 'Quantidade', 'Quantidade de Pratos:')
+        ingred = cursor.fetchall()
+        if ingred:
+            qtd, ok = QtWidgets.QInputDialog.getInt(self, 'Calculadora', 'Quantidade de Pratos:')
             if ok:
-                calculated_ingredients = [(name, ceil(quantity / 5) * qty) for name, qty in ingredients]
-                calculate_dialog = CalculateDialog(self, calculated_ingredients)
-                calculate_dialog.exec_()
+                calc_ing = [(name, ceil(qtd / 5) * qty) for name, qty in ingred]
+                dlg = CalculateDialog(self, calc_ing)
+                dlg.exec_()
         else:
-            QtWidgets.QMessageBox.information(self, 'Erro', 'Nenhum ingrediente encontrado para esta receita.')
+            QtWidgets.QMessageBox.information(self, 'Aviso', 'Sem ingredientes cadastrados.')
 
     def generate_pdf_report(self):
-        cursor.execute("SELECT id, name, stock FROM recipes")
-        recipes = cursor.fetchall()
-        total_ingredients = {}
+        try:
+            cursor.execute("SELECT id, name, stock FROM recipes")
+            recipes = cursor.fetchall()
+            total_ingredients = {}
+            for r in recipes:
+                cursor.execute("SELECT name, quantity FROM ingredients WHERE recipe_id = ?", (r[0],))
+                for name, qty in cursor.fetchall():
+                    total_ingredients[name] = total_ingredients.get(name, 0) + (qty / 5) * r[2]
+            
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(0, 10, "Relatorio de Estoque - Estrela do Oeste", ln=True, align='C')
+            pdf.ln(10)
+            pdf.set_font("Arial", size=12)
+            for ing, qtd in total_ingredients.items():
+                pdf.cell(0, 10, f"{ing}: {ceil(qtd)}", ln=True)
+            pdf.output("Relatorio_Estoque.pdf")
+            QtWidgets.QMessageBox.information(self, "Sucesso", "PDF Gerado!")
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Erro", str(e))
 
-        for recipe in recipes:
-            recipe_id = recipe[0]
-            stock = recipe[2]
-            cursor.execute("SELECT name, quantity FROM ingredients WHERE recipe_id = ?", (recipe_id,))
-            ingredients = cursor.fetchall()
-            for name, quantity in ingredients:
-                if name not in total_ingredients:
-                    total_ingredients[name] = 0
-                total_ingredients[name] += (quantity / 5) * stock  # Usando a mesma fórmula de cálculo da função calculate_ingredients
+    def open_budget_dialog(self):
+        dlg = BudgetDialog(self)
+        dlg.exec_()
 
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-
-        for ingredient, total_quantity in total_ingredients.items():
-            pdf.cell(200, 10, txt=f"{ingredient}: {ceil(total_quantity)}", ln=True)
-
-        pdf.output("Lista de Compras.pdf")
-        QtWidgets.QMessageBox.information(self, 'Relatório Gerado', 'Relatório de ingredientes gerado com sucesso.')
-
+# --- DIALOGS (Janelas Secundárias) ---
 class EditRecipeDialog(QtWidgets.QDialog):
     def __init__(self, parent, recipe_id):
         super().__init__(parent)
-        self.setWindowTitle('Editar Receita')
-        self.setGeometry(100, 100, 400, 300)
+        self.setWindowTitle("Editar Receita")
+        self.resize(500, 600)
         self.recipe_id = recipe_id
-        self.initUI()
-#-------------------------------------------------------
-    def initUI(self):
-            layout = QtWidgets.QVBoxLayout(self)
-
-            # Recipe name
-            cursor.execute("SELECT name, dollar_value, stock, category FROM recipes WHERE id = ?", (self.recipe_id,))
-            recipe = cursor.fetchone()
-            self.name_edit = QtWidgets.QLineEdit(recipe[0], self)
-            self.name_edit.setMaxLength(100)  # Define o comprimento máximo para o campo de texto
-            self.name_edit.textChanged.connect(self.convert_to_upper)  # Conecta a mudança de texto ao método de conversão
-            layout.addWidget(QtWidgets.QLabel('Nome da Receita:'))
-            layout.addWidget(self.name_edit)
-
-            # Dollar value
-            self.dollar_value_edit = QtWidgets.QDoubleSpinBox(self)
-            self.dollar_value_edit.setDecimals(2)
-            self.dollar_value_edit.setValue(recipe[1])
-            layout.addWidget(QtWidgets.QLabel('Preço do Prato:'))
-            layout.addWidget(self.dollar_value_edit)
-
-            # Stock
-            self.stock_edit = QtWidgets.QSpinBox(self)
-            self.stock_edit.setMaximum(100000)  # Define o valor máximo para o estoque
-            self.stock_edit.setValue(recipe[2])
-            layout.addWidget(QtWidgets.QLabel('Quantidade em Estoque:'))
-            layout.addWidget(self.stock_edit)
-
-            # Category
-            self.category_edit = QtWidgets.QComboBox(self)
-            self.category_edit.addItems(["Entrada", "Prato Principal", "Doces", "Bebidas Alcolicas", "Sucos", "Salgados", "Sopas"])
-            self.category_edit.setCurrentText(recipe[3])
-            layout.addWidget(QtWidgets.QLabel('Categoria:'))
-            layout.addWidget(self.category_edit)
-
-            # Ingredients
-            self.ingredients_list = QtWidgets.QListWidget(self)
-            layout.addWidget(QtWidgets.QLabel('Ingredientes:'))
-            layout.addWidget(self.ingredients_list)
-            self.load_ingredients()
-
-            # Add ingredient
-            add_ingredient_layout = QtWidgets.QHBoxLayout()
-            self.new_ingredient_edit = QtWidgets.QLineEdit(self)
-            self.new_ingredient_edit.setMaxLength(100)  # Define o comprimento máximo para o campo de texto
-            self.new_ingredient_edit.textChanged.connect(self.convert_to_upper)  # Conecta a mudança de texto ao método de conversão
-            add_ingredient_layout.addWidget(self.new_ingredient_edit)
-
-            # Ingredient suggestions
-            cursor.execute("SELECT DISTINCT name FROM ingredients")
-            ingredient_names = [row[0] for row in cursor.fetchall()]
-            completer = QtWidgets.QCompleter(ingredient_names)
-            self.new_ingredient_edit.setCompleter(completer)
-
-            self.new_ingredient_quantity_edit = QtWidgets.QSpinBox(self)
-            self.new_ingredient_quantity_edit.setMinimum(1)
-            add_ingredient_layout.addWidget(self.new_ingredient_quantity_edit)
         
-            add_ingredient_button = QtWidgets.QPushButton('Adicionar', self)
-            add_ingredient_button.clicked.connect(self.add_ingredient)
-            add_ingredient_layout.addWidget(add_ingredient_button)
-            layout.addLayout(add_ingredient_layout)
+        # O background será aplicado via CSS Global
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(15)
+        
+        cursor.execute("SELECT name, dollar_value, stock, category FROM recipes WHERE id = ?", (recipe_id,))
+        data = cursor.fetchone()
+        
+        layout.addWidget(QtWidgets.QLabel("Nome:"))
+        self.name_edit = QtWidgets.QLineEdit(data[0])
+        self.name_edit.textChanged.connect(lambda: self.name_edit.setText(self.name_edit.text().upper()))
+        layout.addWidget(self.name_edit)
+        
+        h_layout = QtWidgets.QHBoxLayout()
+        v1 = QtWidgets.QVBoxLayout()
+        v1.addWidget(QtWidgets.QLabel("Preço ($):"))
+        self.price = QtWidgets.QDoubleSpinBox()
+        self.price.setValue(data[1])
+        self.price.setMaximum(10000)
+        v1.addWidget(self.price)
+        h_layout.addLayout(v1)
+        
+        v2 = QtWidgets.QVBoxLayout()
+        v2.addWidget(QtWidgets.QLabel("Estoque:"))
+        self.stock = QtWidgets.QSpinBox()
+        self.stock.setValue(data[2])
+        self.stock.setMaximum(100000)
+        v2.addWidget(self.stock)
+        h_layout.addLayout(v2)
+        layout.addLayout(h_layout)
+        
+        layout.addWidget(QtWidgets.QLabel("Categoria:"))
+        self.cat = QtWidgets.QComboBox()
+        self.cat.addItems(["Entrada", "Prato Principal", "Doces", "Bebidas Alcolicas", "Sucos", "Salgados", "Sopas", "Produtos da Fazenda"])
+        self.cat.setCurrentText(data[3])
+        layout.addWidget(self.cat)
+        
+        layout.addWidget(QtWidgets.QLabel("Ingredientes:"))
+        self.ing_list = QtWidgets.QListWidget()
+        layout.addWidget(self.ing_list)
+        self.load_ing()
+        
+        # Área de Ingredientes (Estilo "Caixa")
+        ing_box = QtWidgets.QFrame()
+        # Estilo inline apenas para forçar o fundo transparente deste box específico se necessário
+        ing_box.setStyleSheet("background: rgba(255,255,255,0.05); border-radius: 8px; padding: 5px;")
+        ib_layout = QtWidgets.QHBoxLayout(ing_box)
+        self.new_ing_name = QtWidgets.QLineEdit()
+        self.new_ing_name.setPlaceholderText("Ingrediente...")
+        self.new_ing_name.textChanged.connect(lambda: self.new_ing_name.setText(self.new_ing_name.text().upper()))
+        
+        cursor.execute("SELECT DISTINCT name FROM ingredients")
+        comp = QtWidgets.QCompleter([r[0] for r in cursor.fetchall()])
+        comp.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        self.new_ing_name.setCompleter(comp)
+        
+        ib_layout.addWidget(self.new_ing_name)
+        self.new_ing_qtd = QtWidgets.QSpinBox()
+        self.new_ing_qtd.setFixedWidth(60)
+        self.new_ing_qtd.setMinimum(1)
+        ib_layout.addWidget(self.new_ing_qtd)
+        
+        btn_add = QtWidgets.QPushButton("+")
+        btn_add.setFixedWidth(40)
+        btn_add.setObjectName("GradientButton")
+        btn_add.clicked.connect(self.add_ing)
+        ib_layout.addWidget(btn_add)
+        layout.addWidget(ing_box)
+        
+        del_btn = QtWidgets.QPushButton("Remover Ingrediente")
+        del_btn.setObjectName("GhostButton")
+        del_btn.clicked.connect(self.del_ing)
+        layout.addWidget(del_btn)
+        
+        btns = QtWidgets.QHBoxLayout()
+        save = QtWidgets.QPushButton("Salvar")
+        save.setObjectName("GradientButton")
+        save.clicked.connect(self.save)
+        btns.addWidget(save)
+        
+        cancel = QtWidgets.QPushButton("Cancelar")
+        cancel.setObjectName("GhostButton")
+        cancel.clicked.connect(self.reject)
+        btns.addWidget(cancel)
+        layout.addLayout(btns)
 
-            # Delete ingredient
-            delete_ingredient_button = QtWidgets.QPushButton('Deletar Ingrediente', self)
-            delete_ingredient_button.clicked.connect(self.delete_ingredient)
-            layout.addWidget(delete_ingredient_button)
+    def load_ing(self):
+        self.ing_list.clear()
+        cursor.execute("SELECT id, name, quantity FROM ingredients WHERE recipe_id=?", (self.recipe_id,))
+        for r in cursor.fetchall():
+            item = QtWidgets.QListWidgetItem(f"{r[1]} - {r[2]}")
+            item.setData(QtCore.Qt.UserRole, r[0])
+            self.ing_list.addItem(item)
 
-            # Save and Cancel buttons
-            buttons_layout = QtWidgets.QHBoxLayout()
-            save_button = QtWidgets.QPushButton('Salvar', self)
-            save_button.clicked.connect(self.save_recipe)
-            buttons_layout.addWidget(save_button)
-
-            cancel_button = QtWidgets.QPushButton('Cancelar', self)
-            cancel_button.clicked.connect(self.reject)
-            buttons_layout.addWidget(cancel_button)
-            layout.addLayout(buttons_layout)
-
-    def convert_to_upper(self):
-        # Converte o texto de todos os campos para maiúsculas
-        if self.sender() == self.name_edit:
-            self.name_edit.setText(self.name_edit.text().upper())
-        elif self.sender() == self.new_ingredient_edit:
-            self.new_ingredient_edit.setText(self.new_ingredient_edit.text().upper())
-
-    def load_ingredients(self):
-        self.ingredients_list.clear()
-        cursor.execute("SELECT id, name, quantity FROM ingredients WHERE recipe_id = ?", (self.recipe_id,))
-        for row in cursor.fetchall():
-            item = QtWidgets.QListWidgetItem(f"{row[1]} - {row[2]}")
-            item.setData(QtCore.Qt.UserRole, row[0])
-            self.ingredients_list.addItem(item)
-
-    def add_ingredient(self):
-        name = self.new_ingredient_edit.text()
-        quantity = self.new_ingredient_quantity_edit.value()
-        cursor.execute("INSERT INTO ingredients (recipe_id, name, quantity) VALUES (?, ?, ?)", (self.recipe_id, name, quantity))
-        conn.commit()
-        self.load_ingredients()
-        # Limpar os campos de entrada após adicionar o ingrediente
-        self.new_ingredient_edit.clear()
-        self.new_ingredient_quantity_edit.setValue(1)
-
-    def delete_ingredient(self):
-        selected_item = self.ingredients_list.currentItem()
-        if selected_item:
-            ingredient_id = selected_item.data(QtCore.Qt.UserRole)
-            cursor.execute("DELETE FROM ingredients WHERE id = ?", (ingredient_id,))
+    def add_ing(self):
+        name = self.new_ing_name.text()
+        if name:
+            cursor.execute("INSERT INTO ingredients (recipe_id, name, quantity) VALUES (?,?,?)", (self.recipe_id, name, self.new_ing_qtd.value()))
             conn.commit()
-            self.load_ingredients()
+            self.load_ing()
+            self.new_ing_name.clear()
 
-    def save_recipe(self):
-        name = self.name_edit.text()
-        dollar_value = self.dollar_value_edit.value()
-        stock = self.stock_edit.value()
-        category = self.category_edit.currentText()
-        cursor.execute("UPDATE recipes SET name = ?, dollar_value = ?, stock = ?, category = ? WHERE id = ?", (name, dollar_value, stock, category, self.recipe_id))
+    def del_ing(self):
+        cur = self.ing_list.currentItem()
+        if cur:
+            cursor.execute("DELETE FROM ingredients WHERE id=?", (cur.data(QtCore.Qt.UserRole),))
+            conn.commit()
+            self.load_ing()
+
+    def save(self):
+        cursor.execute("UPDATE recipes SET name=?, dollar_value=?, stock=?, category=? WHERE id=?", 
+                       (self.name_edit.text(), self.price.value(), self.stock.value(), self.cat.currentText(), self.recipe_id))
         conn.commit()
         self.accept()
 
 class CalculateDialog(QtWidgets.QDialog):
-    def __init__(self, parent, ingredients):
+    def __init__(self, parent, data):
         super().__init__(parent)
-        self.setWindowTitle('Ingredientes Calculados')
-        self.setGeometry(100, 100, 300, 200)
-        self.ingredients = ingredients
-        self.initUI()
-
-    def initUI(self):
+        self.setWindowTitle("Resultado")
+        self.resize(300, 400)
         layout = QtWidgets.QVBoxLayout(self)
-        for name, qty in self.ingredients:
-            layout.addWidget(QtWidgets.QLabel(f"{name}: {qty}"))
-        close_button = QtWidgets.QPushButton('Fechar', self)
-        close_button.clicked.connect(self.accept)
-        layout.addWidget(close_button)
+        lbl = QtWidgets.QLabel("Lista de Compras:")
+        lbl.setStyleSheet("font-size: 14pt; color: #ffa500; font-weight: bold;")
+        layout.addWidget(lbl)
+        
+        lst = QtWidgets.QListWidget()
+        for n, q in data:
+            lst.addItem(f"{n}: {q}")
+        layout.addWidget(lst)
+        
+        btn = QtWidgets.QPushButton("Fechar")
+        btn.setObjectName("GhostButton")
+        btn.clicked.connect(self.accept)
+        layout.addWidget(btn)
 
 class BudgetDialog(QtWidgets.QDialog):
     def __init__(self, parent):
         super().__init__(parent)
-        self.setWindowTitle('Gerar Orçamento')
-        self.setGeometry(100, 100, 400, 300)
-        self.initUI()
-
-    def initUI(self):
+        self.setWindowTitle("Orçamento")
+        self.resize(700, 500)
+        self.items = []
+        
         layout = QtWidgets.QVBoxLayout(self)
-
-        # Lista de receitas para selecionar
-        self.recipe_selection = QtWidgets.QListWidget(self)
+        
+        h_layout = QtWidgets.QHBoxLayout()
+        
+        left = QtWidgets.QVBoxLayout()
+        left.addWidget(QtWidgets.QLabel("1. Escolha o item:"))
+        self.rec_list = QtWidgets.QListWidget()
         cursor.execute("SELECT id, name, dollar_value FROM recipes")
-        for row in cursor.fetchall():
-            item = QtWidgets.QListWidgetItem(f"{row[1]} - ${row[2]:.2f}")
-            item.setData(QtCore.Qt.UserRole, row)
-            self.recipe_selection.addItem(item)
-        layout.addWidget(self.recipe_selection)
+        for r in cursor.fetchall():
+            i = QtWidgets.QListWidgetItem(f"{r[1]} - ${r[2]}")
+            i.setData(QtCore.Qt.UserRole, r)
+            self.rec_list.addItem(i)
+        left.addWidget(self.rec_list)
+        
+        q_layout = QtWidgets.QHBoxLayout()
+        q_layout.addWidget(QtWidgets.QLabel("Qtd:"))
+        self.qtd = QtWidgets.QSpinBox()
+        self.qtd.setMinimum(1)
+        q_layout.addWidget(self.qtd)
+        left.addLayout(q_layout)
+        
+        add = QtWidgets.QPushButton("Adicionar >>")
+        add.setObjectName("GradientButton")
+        add.clicked.connect(self.add_item)
+        left.addWidget(add)
+        
+        h_layout.addLayout(left)
+        
+        right = QtWidgets.QVBoxLayout()
+        right.addWidget(QtWidgets.QLabel("2. Itens Selecionados:"))
+        self.sel_list = QtWidgets.QListWidget()
+        right.addWidget(self.sel_list)
+        
+        self.total_lbl = QtWidgets.QLabel("Total: $0.00")
+        self.total_lbl.setStyleSheet("font-size: 18pt; color: #ff9966; font-weight: bold;")
+        self.total_lbl.setAlignment(QtCore.Qt.AlignRight)
+        right.addWidget(self.total_lbl)
+        
+        rem = QtWidgets.QPushButton("Remover")
+        rem.setObjectName("GhostButton")
+        rem.clicked.connect(self.rem_item)
+        right.addWidget(rem)
+        
+        h_layout.addLayout(right)
+        layout.addLayout(h_layout)
+        
+        gen = QtWidgets.QPushButton("Gerar PDF")
+        gen.setObjectName("GradientButton")
+        gen.clicked.connect(self.gen_pdf)
+        layout.addWidget(gen)
 
-        # Input de quantidade
-        quantity_layout = QtWidgets.QHBoxLayout()
-        self.quantity_input = QtWidgets.QSpinBox(self)
-        self.quantity_input.setMinimum(1)
-        self.quantity_input.setMaximum(100000)
-        quantity_layout.addWidget(QtWidgets.QLabel('Quantidade:'))
-        quantity_layout.addWidget(self.quantity_input)
-        layout.addLayout(quantity_layout)
+    def add_item(self):
+        cur = self.rec_list.currentItem()
+        if cur:
+            data = cur.data(QtCore.Qt.UserRole)
+            q = self.qtd.value()
+            sub = data[2] * q
+            self.items.append((data[1], q, sub))
+            self.sel_list.addItem(f"{data[1]} (x{q}) = ${sub:.2f}")
+            self.update_total()
 
-        # Botão para adicionar ao orçamento
-        add_button = QtWidgets.QPushButton('Adicionar ao Orçamento', self)
-        add_button.clicked.connect(self.add_to_budget)
-        layout.addWidget(add_button)
+    def rem_item(self):
+        row = self.sel_list.currentRow()
+        if row >= 0:
+            self.sel_list.takeItem(row)
+            del self.items[row]
+            self.update_total()
 
-        # Lista de itens do orçamento
-        self.budget_list = QtWidgets.QListWidget(self)
-        layout.addWidget(self.budget_list)
+    def update_total(self):
+        tot = sum(x[2] for x in self.items)
+        self.total_lbl.setText(f"Total: ${tot:.2f}")
 
-        # Botão para remover do orçamento
-        remove_button = QtWidgets.QPushButton('Remover do Orçamento', self)
-        remove_button.clicked.connect(self.remove_from_budget)
-        layout.addWidget(remove_button)
-
-        # Botão para gerar PDF
-        generate_pdf_button = QtWidgets.QPushButton('Gerar PDF do Orçamento', self)
-        generate_pdf_button.clicked.connect(self.generate_budget_pdf)
-        layout.addWidget(generate_pdf_button)
-
-        # Botões de fechar e cancelar
-        buttons_layout = QtWidgets.QHBoxLayout()
-        close_button = QtWidgets.QPushButton('Fechar', self)
-        close_button.clicked.connect(self.accept)
-        buttons_layout.addWidget(close_button)
-        layout.addLayout(buttons_layout)
-
-        self.budget_items = []
-
-    def add_to_budget(self):
-        selected_item = self.recipe_selection.currentItem()
-        if selected_item:
-            recipe_data = selected_item.data(QtCore.Qt.UserRole)
-            quantity = self.quantity_input.value()
-            total_price = recipe_data[2] * quantity
-            budget_item = (recipe_data[1], quantity, total_price)
-            self.budget_items.append(budget_item)
-            self.budget_list.addItem(f"{recipe_data[1]} x{quantity} - ${total_price:.2f}")
-
-    def remove_from_budget(self):
-        selected_item = self.budget_list.currentItem()
-        if selected_item:
-            # Remove da lista de itens de orçamento
-            item_text = selected_item.text()
-            for item in self.budget_items:
-                if item_text.startswith(item[0]):
-                    self.budget_items.remove(item)
-                    break
-            # Remove da lista visual
-            self.budget_list.takeItem(self.budget_list.row(selected_item))
-
-    def generate_budget_pdf(self):
-        if not self.budget_items:
-            QtWidgets.QMessageBox.warning(self, 'Erro', 'Nenhum item no orçamento.')
-            return
-
-        total_value = sum(item[2] for item in self.budget_items)
+    def gen_pdf(self):
+        if not self.items: return
         pdf = FPDF()
         pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, "Orcamento", ln=True, align='C')
+        pdf.ln(10)
         pdf.set_font("Arial", size=12)
+        for n, q, v in self.items:
+            pdf.cell(0, 10, f"{n} (x{q}) - ${v:.2f}", ln=True)
+        pdf.ln(5)
+        tot = sum(x[2] for x in self.items)
+        pdf.cell(0, 10, f"TOTAL: ${tot:.2f}", ln=True, align='R')
+        pdf.output("Orcamento.pdf")
+        QtWidgets.QMessageBox.information(self, "Sucesso", "PDF Salvo!")
+        self.accept()
 
-        pdf.cell(200, 10, txt="Orçamento", ln=True, align="C")
-        pdf.cell(200, 10, txt="", ln=True)  # Linha em branco
-
-        for item in self.budget_items:
-            pdf.cell(200, 10, txt=f"{item[0]} x{item[1]} - ${item[2]:.2f}", ln=True)
-
-        pdf.cell(200, 10, txt="", ln=True)  # Linha em branco
-        pdf.cell(200, 10, txt=f"Total: ${total_value:.2f}", ln=True, align="R")
-
-        pdf.output("Orçamento.pdf")
-        QtWidgets.QMessageBox.information(self, 'Relatório Gerado', 'Orçamento gerado com sucesso.')
-
-
-
-def main():
+if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     ex = RecipeApp()
     ex.show()
     sys.exit(app.exec_())
-
-if __name__ == '__main__':
-    main()
